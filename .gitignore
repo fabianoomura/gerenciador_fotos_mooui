@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.venv*/
+venv/
+.env
+.env.*
+!.env.example
+config.local.ps1
+
+# Testes / cobertura
+.pytest_cache/
+.test-tmp*/
+.coverage
+htmlcov/
+.tox/
+
+# Ferramentas
+.ruff_cache/
+.mypy_cache/
+
+# Banco e dados derivados (nunca commitar)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+catalogo*.db
+/dados_app/
+/thumbs/
+/data/
+visual_full*.log
+visual_parallel*.log
+full_catalog*.log
+visual_512*.log
+demo_*.log
+marketing_reprocess*.log
+*.log
+--db
+/homemooui.localsharemooui-foto-catalogo/
+
+# Credenciais de compartilhamentos — nunca commitar
+*.credentials
+smb-creds*
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/settings.json.example
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Next.js
+web/node_modules/
+web/.next/

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-label="Prévia ilustrativa do catálogo visual">
+  <rect width="1200" height="720" rx="24" fill="#f7f7f4"/>
+  <rect width="1200" height="72" rx="24" fill="#ffffff"/>
+  <rect x="32" y="20" width="34" height="34" rx="8" fill="#292929"/>
+  <text x="80" y="44" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#292929">Foto Catálogo</text>
+  <rect x="350" y="16" width="500" height="42" rx="21" fill="#eeeeeb"/>
+  <text x="378" y="43" font-family="Arial,sans-serif" font-size="14" fill="#777">Busque por tema, cor ou pessoa…</text>
+  <rect x="0" y="72" width="240" height="648" fill="#efefeb"/>
+  <text x="28" y="118" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="#292929">Filtros</text>
+  <g fill="#fff" stroke="#d8d8d2">
+    <rect x="28" y="145" width="82" height="34" rx="17"/><rect x="120" y="145" width="82" height="34" rx="17"/>
+    <rect x="28" y="194" width="174" height="38" rx="10"/><rect x="28" y="245" width="174" height="38" rx="10"/>
+  </g>
+  <g>
+    <circle cx="46" cy="328" r="13" fill="#f5a7c5"/><circle cx="82" cy="328" r="13" fill="#86cbd0"/>
+    <circle cx="118" cy="328" r="13" fill="#ffd966"/><circle cx="154" cy="328" r="13" fill="#7d9b76"/>
+  </g>
+  <g transform="translate(270 105)">
+    <rect width="205" height="245" rx="16" fill="#f5a7c5"/><circle cx="64" cy="76" r="35" fill="#ffd966"/><path d="M25 210 90 120l45 55 35-35 25 70Z" fill="#86cbd0"/>
+    <rect x="225" width="205" height="315" rx="16" fill="#d9d4ca"/><rect x="260" y="38" width="135" height="110" rx="55" fill="#86cbd0"/><path d="m250 282 70-105 85 105Z" fill="#7d9b76"/>
+    <rect x="450" width="205" height="220" rx="16" fill="#ffd966"/><circle cx="552" cy="100" r="62" fill="#f5a7c5"/>
+    <rect x="675" width="205" height="280" rx="16" fill="#86cbd0"/><path d="M700 245 770 75l85 170Z" fill="#f7f7f4"/>
+    <rect y="265" width="205" height="250" rx="16" fill="#7d9b76"/><circle cx="102" cy="380" r="72" fill="#ffd966"/>
+    <rect x="225" y="335" width="205" height="210" rx="16" fill="#f5a7c5"/><path d="M250 515 330 370l75 145Z" fill="#292929" opacity=".75"/>
+    <rect x="450" y="240" width="205" height="310" rx="16" fill="#e4ddd4"/><circle cx="552" cy="350" r="68" fill="#7d9b76"/><rect x="500" y="440" width="105" height="75" rx="12" fill="#86cbd0"/>
+    <rect x="675" y="300" width="205" height="245" rx="16" fill="#ffd966"/><circle cx="740" cy="390" r="42" fill="#86cbd0"/><circle cx="815" cy="455" r="48" fill="#f5a7c5"/>
+  </g>
+</svg>
