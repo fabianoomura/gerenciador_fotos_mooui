@@ -28,6 +28,143 @@ INSERT OR IGNORE INTO vocab_tipo (termo, tipo) VALUES
 --     ('lookbook', 'tematica');
 
 -- ============================================================================
+-- sinonimos: expandem a busca textual para os termos presentes no acervo.
+-- Cada grupo reune formas equivalentes; ao digitar qualquer uma, a busca
+-- tambem procura as demais (ex.: "luminaria" encontra "abajur").
+-- Termos ja normalizados (unidecode + lowercase). Curavel por instalacao.
+-- ============================================================================
+INSERT OR IGNORE INTO sinonimos (grupo, termo) VALUES
+    ('organizador', 'organizador'),
+    ('organizador', 'organizadora'),
+    ('organizador', 'caixa organizadora'),
+    ('organizador', 'caixas organizadoras'),
+    ('organizador', 'cesto organizador'),
+    ('organizador', 'cesto'),
+    ('organizador', 'cesta'),
+    ('organizador', 'porta treco'),
+    ('organizador', 'canastra'),
+
+    ('abajur', 'abajur'),
+    ('abajur', 'luminaria'),
+    ('abajur', 'lampada'),
+    ('abajur', 'lampada de mesa'),
+
+    ('edredom', 'edredom'),
+    ('edredom', 'edredon'),
+    ('edredom', 'duvet'),
+    ('edredom', 'capa de edredom'),
+
+    ('colcha', 'colcha'),
+    ('colcha', 'cobreleito'),
+    ('colcha', 'cobre leito'),
+    ('colcha', 'cobre cama'),
+
+    ('fronha', 'fronha'),
+    ('fronha', 'capa de travesseiro'),
+    ('fronha', 'porta travesseiro'),
+
+    ('lencol', 'lencol'),
+    ('lencol', 'roupa de cama'),
+
+    ('jogo de cama', 'jogo de cama'),
+    ('jogo de cama', 'jogos de cama'),
+    ('jogo de cama', 'kit cama'),
+    ('jogo de cama', 'conjunto de cama'),
+    ('jogo de cama', 'roupa de cama'),
+
+    ('almofada', 'almofada'),
+    ('almofada', 'almofadao'),
+    ('almofada', 'coxim'),
+
+    ('tapete', 'tapete'),
+    ('tapete', 'playmat'),
+    ('tapete', 'tapete de atividades'),
+    ('tapete', 'tapetinho'),
+    ('tapete', 'tapete playmat'),
+
+    ('trocador', 'trocador'),
+    ('trocador', 'tapete de trocador'),
+
+    ('tenda', 'tenda'),
+    ('tenda', 'cabana'),
+    ('tenda', 'tipi'),
+    ('tenda', 'barraca'),
+
+    ('cortina', 'cortina'),
+    ('cortina', 'cortinado'),
+
+    ('manta', 'manta'),
+    ('manta', 'xale'),
+
+    ('mochila', 'mochila'),
+    ('mochila', 'bolsa'),
+    ('mochila', 'sacola'),
+
+    ('lancheira', 'lancheira'),
+    ('lancheira', 'bolsa termica'),
+
+    ('futon', 'futon'),
+    ('futon', 'colchonete'),
+
+    ('espreguicadeira', 'espreguicadeira'),
+    ('espreguicadeira', 'cadeira de descanso'),
+
+    ('pufe', 'pufe'),
+    ('pufe', 'puff'),
+    ('pufe', 'apoio para pes'),
+    ('pufe', 'descanso de pes'),
+
+    ('poltrona', 'poltrona'),
+    ('poltrona', 'cadeira de amamentacao'),
+
+    ('adesivo', 'adesivo'),
+    ('adesivo', 'adesivo de parede'),
+    ('adesivo', 'sticker'),
+
+    ('papel de parede', 'papel de parede'),
+    ('papel de parede', 'wallpaper'),
+    ('papel de parede', 'revestimento de parede'),
+
+    ('poster', 'poster'),
+    ('poster', 'quadro'),
+    ('poster', 'gravura'),
+    ('poster', 'lamina'),
+
+    ('regua de altura', 'regua de altura'),
+    ('regua de altura', 'regua de crescimento'),
+    ('regua de altura', 'medidor de altura'),
+
+    ('necessaire', 'necessaire'),
+    ('necessaire', 'estojo'),
+
+    ('babador', 'babador'),
+    ('babador', 'babeiro'),
+
+    ('macacao', 'macacao'),
+    ('macacao', 'jardineira'),
+    ('macacao', 'macaquinho'),
+
+    ('saco de roupa', 'saquinho roupa suja'),
+    ('saco de roupa', 'saco de roupa suja'),
+    ('saco de roupa', 'cesto de roupa'),
+
+    ('toalha', 'toalha'),
+    ('toalha', 'roupao'),
+
+    ('minhocao', 'minhocao'),
+    ('minhocao', 'rolo de berco'),
+    ('minhocao', 'protetor de berco'),
+    ('minhocao', 'rolinho de berco'),
+
+    ('flamula', 'flamula'),
+    ('flamula', 'bandeirinha'),
+    ('flamula', 'galhardete'),
+
+    ('adorno de parede', 'adorno de parede'),
+    ('adorno de parede', 'enfeite de parede'),
+    ('adorno de parede', 'decoracao de parede');
+
+-- ============================================================================
 -- config: parametros do indexador, embedder, API
 -- ============================================================================
 INSERT OR IGNORE INTO config (chave, valor, tipo, descricao) VALUES

@@ -82,6 +82,7 @@ if (-not (Test-Http "http://127.0.0.1:$WebPort")) {
     $env:API_INTERNAL_URL = "http://127.0.0.1:$ApiPort"
     $env:CATALOGO_API_TOKEN = $apiToken
     $env:ALLOWED_DEV_ORIGINS = $CatalogoConfig.AllowedDevOrigins
+    $env:NEXT_PUBLIC_CATALOGO_LOGO_URL = $CatalogoConfig.LogoUrl
     Start-Process npm.cmd -ArgumentList @('run', 'dev', '--', '-p', "$WebPort", '-H', '0.0.0.0') `
         -WorkingDirectory $Web `
         -RedirectStandardOutput (Join-Path $Web "demo-$WebPort.out.log") `

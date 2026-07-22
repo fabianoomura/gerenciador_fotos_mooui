@@ -15,6 +15,11 @@ from PIL import Image, UnidentifiedImageError
 from starlette.concurrency import run_in_threadpool
 
 from catalogo.db import connect
+from catalogo.filtros import (
+    CAMPOS_FILTRO,
+    VALORES_VALIDOS,
+    construir_filtros_sql,
+)
 from catalogo.search import (
     ClipTextEmbedder,
     buscar_hibrida,
@@ -22,6 +27,12 @@ from catalogo.search import (
     buscar_semelhantes,
 )
 from catalogo.visual import ClipImageEmbedder
+
+API_VERSION = "2"
+
+# Parametros aceitos por /busca alem dos filtros; qualquer outro retorna 422
+# em vez de ser ignorado em silencio.
+_PARAMS_BUSCA = CAMPOS_FILTRO | {"q", "limit", "offset"}
 
 
 class SearchService:
@@ -72,7 +83,7 @@ def create_app(
     db = Path(db_path)
     buscar = searcher or SearchService(db)
     buscar_imagem = image_searcher or ImageSearchService(db)
-    app = FastAPI(title="Catálogo Visual de Fotos", version="0.1.0")
+    app = FastAPI(title="Catálogo Visual de Fotos", version="0.2.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins or ["http://localhost:3000"],
@@ -103,45 +114,117 @@ def create_app(
 
     @app.get("/busca")
     def busca(
+        request: Request,
         q: str | None = None,
         ano: list[int] | None = Query(None),
         tipo: list[str] | None = Query(None),
+        colecao: list[str] | None = Query(None),
+        categoria: list[str] | None = Query(None),
         pessoa: list[str] | None = Query(None),
         pessoa_tipo: list[str] | None = Query(None),
+        ambiente_tipo: list[str] | None = Query(None),
+        ambiente_tema: list[str] | None = Query(None),
+        drop_tema: list[str] | None = Query(None),
         formato_foto: list[str] | None = Query(None),
-        categoria: list[str] | None = Query(None),
         variante: list[str] | None = Query(None),
+        orientacao: list[str] | None = Query(None),
+        possui_pessoa: str | None = Query(None),
+        possui_modelo: str | None = Query(None),
+        direitos_uso_status: list[str] | None = Query(None),
         cor: list[str] | None = Query(None),
         tom: list[str] | None = Query(None),
         limit: int = Query(20, ge=1, le=100),
         offset: int = Query(0, ge=0),
     ):
+        _rejeitar_params_desconhecidos(request)
         filtros = {
             "ano": ano,
             "tipo": tipo,
+            "colecao": colecao,
+            "categoria": categoria,
             "pessoa": pessoa,
             "pessoa_tipo": pessoa_tipo,
+            "ambiente_tipo": ambiente_tipo,
+            "ambiente_tema": ambiente_tema,
+            "drop_tema": drop_tema,
             "formato_foto": formato_foto,
-            "categoria": categoria,
             "variante": variante,
+            "orientacao": orientacao,
+            "possui_pessoa": possui_pessoa,
+            "possui_modelo": possui_modelo,
+            "direitos_uso_status": direitos_uso_status,
             "cor": cor,
             "tom": tom,
         }
-        if q:
-            candidatos = buscar(q, limit=limit + offset + 1, **filtros)
-            itens = candidatos[offset : offset + limit]
-            total = None
-            has_more = len(candidatos) > offset + limit
-        else:
-            itens = _listar_sql(db, filtros, limit=limit, offset=offset)
-            total = _contar_sql(db, filtros)
-            has_more = offset + len(itens) < total
+        try:
+            if q:
+                candidatos = buscar(q, limit=limit + offset + 1, **filtros)
+                itens = candidatos[offset : offset + limit]
+                total = None
+                has_more = len(candidatos) > offset + limit
+            else:
+                itens = _listar_sql(db, filtros, limit=limit, offset=offset)
+                total = _contar_sql(db, filtros)
+                has_more = offset + len(itens) < total
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        aplicados = {
+            campo: valor if isinstance(valor, list) else [valor]
+            for campo, valor in filtros.items()
+            if valor is not None and valor != []
+        }
         return {
             "items": [_serializar(item) for item in itens],
             "limit": limit,
             "offset": offset,
             "total": total,
             "has_more": has_more,
+            "applied_filters": aplicados,
+            "ignored_filters": [],
+        }
+
+    @app.get("/capabilities")
+    def capabilities():
+        return {
+            "api_version": API_VERSION,
+            "search_mode": ["metadata", "fts", "vector", "hybrid"],
+            "filters": {
+                "ano": "integer",
+                "tipo": "string",
+                "colecao": "string",
+                "categoria": "string",
+                "pessoa": "string",
+                "pessoa_tipo": [
+                    "arquiteto",
+                    "influenciador",
+                    "modelo",
+                    "fotografo",
+                    "parceiro",
+                ],
+                "ambiente_tipo": "string",
+                "ambiente_tema": "string",
+                "drop_tema": "string",
+                "formato_foto": "string",
+                "variante": "string",
+                "cor": "string",
+                "tom": "string",
+                "orientacao": sorted(VALORES_VALIDOS["orientacao"]),
+                "possui_pessoa": "boolean",
+                "possui_modelo": "boolean",
+                "direitos_uso_status": sorted(VALORES_VALIDOS["direitos_uso_status"]),
+            },
+            "filter_values_endpoint": "/facetas",
+            "color_values_endpoint": "/paleta/swatches",
+            "supports_negative_filters": True,
+            "negative_filter_syntax": "prefixe o valor com ! (ex.: pessoa_tipo=!modelo)",
+            "unknown_filters": "retornam 422; nada e ignorado em silencio",
+            "notes": {
+                "possui_modelo": "true equivale a pessoa_tipo=modelo; false exclui modelos",
+                "possui_pessoa": "tri-estado: NULL no banco significa desconhecido "
+                "e nao casa com true nem false",
+                "direitos_uso_status": "nunca inferido por IA; unknown ate revisao humana",
+            },
+            "pagination": {"limit_max": 100},
         }
 
     @app.post("/busca/por-imagem")
@@ -333,24 +416,24 @@ def _contar_sql(db: Path, filtros: dict[str, object]) -> int:
 
 def _filtros_sql(filtros: dict[str, object]) -> tuple[list[str], list[object]]:
     where = ["status!='removido'"]
-    params: list[object] = []
-    for campo, valor in filtros.items():
-        if valor is not None:
-            valores = valor if isinstance(valor, (list, tuple, set)) else [valor]
-            if not valores:
-                continue
-            if campo in {"cor", "tom"}:
-                coluna_cores = "cores_comerciais_json" if campo == "cor" else "cores_marketing_json"
-                where.append(
-                    f"EXISTS (SELECT 1 FROM json_each(imagens.{coluna_cores}) "
-                    f"WHERE json_extract(value, '$.nome') IN "
-                    f"({','.join('?' for _ in valores)}))"
-                )
-                params.extend(valores)
-                continue
-            where.append(f"{campo} IN ({','.join('?' for _ in valores)})")
-            params.extend(valores)
+    clausulas, params = construir_filtros_sql(filtros)
+    where.extend(clausulas)
     return where, params
+
+
+def _rejeitar_params_desconhecidos(request: Request) -> None:
+    """Contrato V2: filtros desconhecidos retornam 422 em vez de sumir em silencio."""
+
+    desconhecidos = sorted(set(request.query_params.keys()) - _PARAMS_BUSCA)
+    if desconhecidos:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "mensagem": "Filtros desconhecidos; nenhum parametro e ignorado em silencio",
+                "filtros_desconhecidos": desconhecidos,
+                "filtros_validos": sorted(_PARAMS_BUSCA),
+            },
+        )
 
 
 def _imagem_por_id(db: Path, imagem_id: int):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections import deque
 from functools import lru_cache
 from pathlib import Path
 
@@ -28,6 +29,67 @@ def extrair_paleta(
     if not pixels:
         return []
 
+    return _quantizar_pixels(pixels, k)
+
+
+def extrair_paleta_produto(
+    fonte: Path | Image.Image,
+    *,
+    k: int = 5,
+    max_size: int = 256,
+    tolerancia_fundo: float = 38.0,
+) -> list[dict[str, object]]:
+    """Extrai cores do produto removendo apenas fundos uniformes ligados as bordas.
+
+    A remocao so e aplicada quando pelo menos dois cantos concordam sobre a cor
+    do fundo e a mascara ocupa uma fracao plausivel da imagem. Em fotos sem fundo
+    de estudio confiavel, retorna a paleta integral.
+    """
+
+    if isinstance(fonte, Image.Image):
+        imagem = fonte.convert("RGBA")
+    else:
+        with Image.open(fonte) as origem:
+            imagem = origem.convert("RGBA")
+    imagem.thumbnail((max_size, max_size))
+    largura, altura = imagem.size
+    if largura < 4 or altura < 4:
+        return extrair_paleta(imagem, k=k, max_size=max_size)
+
+    pixels = list(imagem.get_flattened_data())
+    opacos = [pixel[:3] for pixel in pixels if pixel[3] > 0]
+    if not opacos:
+        return []
+
+    referencias = _referencias_de_fundo(pixels, largura, altura, tolerancia_fundo)
+    if not referencias:
+        return _quantizar_pixels(opacos, k)
+
+    fundo = _mascara_fundo(
+        pixels,
+        largura,
+        altura,
+        referencias,
+        tolerancia_fundo,
+    )
+    cobertura = len(fundo) / len(opacos)
+    if cobertura < 0.08 or cobertura > 0.92:
+        return _quantizar_pixels(opacos, k)
+
+    produto = [
+        pixel[:3]
+        for indice, pixel in enumerate(pixels)
+        if pixel[3] > 0 and indice not in fundo
+    ]
+    return _quantizar_pixels(produto, k) if produto else _quantizar_pixels(opacos, k)
+
+
+def _quantizar_pixels(
+    pixels: list[tuple[int, int, int]],
+    k: int,
+) -> list[dict[str, object]]:
+    if not pixels:
+        return []
     rgb = Image.new("RGB", (len(pixels), 1))
     rgb.putdata(pixels)
     quantizada = rgb.quantize(colors=k, method=Image.Quantize.MEDIANCUT)
@@ -45,6 +107,86 @@ def extrair_paleta(
             }
         )
     return resultado
+
+
+def _referencias_de_fundo(
+    pixels: list[tuple[int, int, int, int]],
+    largura: int,
+    altura: int,
+    tolerancia: float,
+) -> list[tuple[int, int, int]]:
+    lado = max(2, min(largura, altura) // 20)
+    cantos = (
+        (range(lado), range(lado)),
+        (range(largura - lado, largura), range(lado)),
+        (range(lado), range(altura - lado, altura)),
+        (range(largura - lado, largura), range(altura - lado, altura)),
+    )
+    candidatos: list[tuple[int, int, int]] = []
+    for xs, ys in cantos:
+        amostra = [
+            pixels[y * largura + x][:3]
+            for y in ys
+            for x in xs
+            if pixels[y * largura + x][3] > 0
+        ]
+        if not amostra:
+            continue
+        mediana = tuple(sorted(canal)[len(canal) // 2] for canal in zip(*amostra, strict=True))
+        desvio_medio = sum(_distancia_rgb(pixel, mediana) for pixel in amostra) / len(amostra)
+        if desvio_medio <= tolerancia * 0.45:
+            candidatos.append(mediana)  # type: ignore[arg-type]
+
+    return [
+        cor
+        for cor in candidatos
+        if sum(_distancia_rgb(cor, outra) <= tolerancia for outra in candidatos) >= 2
+    ]
+
+
+def _mascara_fundo(
+    pixels: list[tuple[int, int, int, int]],
+    largura: int,
+    altura: int,
+    referencias: list[tuple[int, int, int]],
+    tolerancia: float,
+) -> set[int]:
+    def parece_fundo(indice: int) -> bool:
+        pixel = pixels[indice]
+        return pixel[3] > 0 and min(
+            _distancia_rgb(pixel[:3], referencia) for referencia in referencias
+        ) <= tolerancia
+
+    borda = set(range(largura))
+    borda.update(range((altura - 1) * largura, altura * largura))
+    borda.update(y * largura for y in range(altura))
+    borda.update(y * largura + largura - 1 for y in range(altura))
+    fila = deque(indice for indice in borda if parece_fundo(indice))
+    fundo = set(fila)
+    while fila:
+        indice = fila.popleft()
+        x, y = indice % largura, indice // largura
+        vizinhos = []
+        if x > 0:
+            vizinhos.append(indice - 1)
+        if x + 1 < largura:
+            vizinhos.append(indice + 1)
+        if y > 0:
+            vizinhos.append(indice - largura)
+        if y + 1 < altura:
+            vizinhos.append(indice + largura)
+        for vizinho in vizinhos:
+            if vizinho not in fundo and parece_fundo(vizinho):
+                fundo.add(vizinho)
+                fila.append(vizinho)
+    return fundo
+
+
+def _distancia_rgb(
+    cor_a: tuple[int, int, int],
+    cor_b: tuple[int, int, int],
+) -> float:
+    return math.sqrt(sum((a - b) ** 2 for a, b in zip(cor_a, cor_b, strict=True)))
 
 
 @lru_cache(maxsize=262144)

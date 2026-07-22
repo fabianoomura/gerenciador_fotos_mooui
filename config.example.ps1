@@ -9,6 +9,8 @@ $CatalogoConfig = @{
     PhotoRoot = "/mnt/photo-library/photos"
     PublicUrl = "http://localhost:7777"
     AllowedDevOrigins = "localhost"
+    # Opcional: arquivo em web/public para personalizar a marca local.
+    LogoUrl = ""
     ApiToken = "replace-with-a-long-random-token"
     Uid = 1000
     Gid = 1000

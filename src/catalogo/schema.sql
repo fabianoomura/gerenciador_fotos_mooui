@@ -21,7 +21,18 @@ CREATE TABLE IF NOT EXISTS imagens (
     ambiente_tipo   TEXT,               -- "quarto" | "quarto infantil" (prefixo canonico)
     ambiente_tema   TEXT,               -- "nina e thomas > thomas" | "cachorrinhos" (tema, aninhado com " > ")
     slug_arquivo    TEXT,
+    largura         INTEGER,            -- pixels do original (cabecalho Pillow)
+    altura          INTEGER,
+    orientacao      TEXT
+                    CHECK (orientacao IN ('vertical', 'horizontal', 'square') OR orientacao IS NULL),
+    possui_pessoa   INTEGER
+                    CHECK (possui_pessoa IN (0, 1) OR possui_pessoa IS NULL),
+                                        -- 1/0 apenas com evidencia; NULL = desconhecido
+    direitos_uso_status TEXT NOT NULL DEFAULT 'unknown'
+                    CHECK (direitos_uso_status IN ('approved', 'restricted', 'unknown')),
+    direitos_uso_ref TEXT,              -- origem/validade/observacao humana (nunca inferido por IA)
     paleta_json     TEXT,
+    paleta_produto_json TEXT,            -- paleta sem fundo uniforme, quando detectavel
     cores_comerciais_json TEXT,         -- cores simples para site/Google: Verde, Branco...
     cores_marketing_json TEXT,           -- tons mais refinados para busca criativa do marketing
     visual_status   TEXT NOT NULL DEFAULT 'pendente'
@@ -48,6 +59,8 @@ CREATE INDEX IF NOT EXISTS idx_imagens_variante ON imagens(variante);
 CREATE INDEX IF NOT EXISTS idx_imagens_status    ON imagens(status);
 CREATE INDEX IF NOT EXISTS idx_imagens_mtime     ON imagens(mtime);
 CREATE INDEX IF NOT EXISTS idx_imagens_visual_status ON imagens(visual_status);
+CREATE INDEX IF NOT EXISTS idx_imagens_orientacao ON imagens(orientacao);
+CREATE INDEX IF NOT EXISTS idx_imagens_direitos_uso ON imagens(direitos_uso_status);
 
 -- Full-text search sobre path_raw + slug + pessoa + ambiente (busca textual PT-BR)
 CREATE VIRTUAL TABLE IF NOT EXISTS imagens_fts USING fts5(
@@ -102,6 +115,16 @@ CREATE TABLE IF NOT EXISTS vocab_pessoas (
     pessoa_tipo TEXT,             -- papel revisavel; nunca inferir sem evidencia no path/vocab
     revisado    INTEGER NOT NULL DEFAULT 0 CHECK (revisado IN (0, 1))
 );
+
+-- Sinonimos de busca: expandem a consulta textual para os termos que realmente
+-- aparecem no acervo (ex.: "luminaria" -> "abajur", "duvet" -> "edredom").
+-- Curado pelo administrador; termos ja normalizados (unidecode + lowercase).
+CREATE TABLE IF NOT EXISTS sinonimos (
+    grupo   TEXT NOT NULL,   -- id do grupo de termos equivalentes
+    termo   TEXT NOT NULL,   -- forma normalizada; pode ter mais de uma palavra
+    PRIMARY KEY (grupo, termo)
+);
+CREATE INDEX IF NOT EXISTS idx_sinonimos_termo ON sinonimos(termo);
 
 -- Configuracao chave/valor. Valores JSON quando estruturados.
 CREATE TABLE IF NOT EXISTS config (

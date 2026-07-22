@@ -11,6 +11,9 @@ from catalogo.db import bootstrap, connect
 from catalogo.parser import ParsedPath, parse_path
 from catalogo.scanner import scan_tree, validar_mount_readonly
 
+# Proporcoes entre estes limites contam como "square" (ex.: 1080x1100).
+SQUARE_TOLERANCIA = 0.05
+
 
 @dataclass(slots=True)
 class IndexResult:
@@ -19,6 +22,29 @@ class IndexResult:
     removidos: int = 0
     ignorados_nao_imagem: int = 0
     erros: int = 0
+
+
+def calcular_orientacao(largura: int | None, altura: int | None) -> str | None:
+    """Classifica a orientacao a partir das dimensoes do original."""
+
+    if not largura or not altura:
+        return None
+    razao = largura / altura
+    if abs(razao - 1.0) <= SQUARE_TOLERANCIA:
+        return "square"
+    return "horizontal" if largura > altura else "vertical"
+
+
+def ler_dimensoes(path: Path) -> tuple[int | None, int | None]:
+    """Le largura/altura pelo cabecalho com Pillow, sem carregar os pixels."""
+
+    from PIL import Image
+
+    try:
+        with Image.open(path) as imagem:
+            return int(imagem.size[0]), int(imagem.size[1])
+    except Exception:
+        return None, None
 
 
 def indexar_metadados(
@@ -76,12 +102,15 @@ def indexar_metadados(
                     parsed.path_raw += " reduzida orfa"
                     parsed.pendentes.append("reduzida orfa")
                     parsed.status = "parcial" if parsed.tipo else "nao_classificado"
+                largura, altura = ler_dimensoes(item.path)
                 imagem_id = _upsert_imagem(
                     conn,
                     parsed,
                     mtime=stat.st_mtime,
                     tamanho=stat.st_size,
                     reduzida_path=str(item.reduzida_path) if item.reduzida_path else None,
+                    largura=largura,
+                    altura=altura,
                 )
                 _substituir_pendentes(conn, imagem_id, parsed.pendentes)
                 _registrar_pessoa(conn, parsed)
@@ -138,7 +167,13 @@ def _upsert_imagem(
     mtime: float,
     tamanho: int,
     reduzida_path: str | None,
+    largura: int | None = None,
+    altura: int | None = None,
 ) -> int:
+    orientacao = calcular_orientacao(largura, altura)
+    # Evidencia de pessoa vem apenas do path/vocabulario; sem evidencia fica NULL
+    # (desconhecido) e nunca sobrescreve um valor ja revisado no banco.
+    possui_pessoa = 1 if (parsed.pessoa or parsed.pessoa_tipo) else None
     valores = (
         parsed.path,
         parsed.path_raw,
@@ -156,6 +191,10 @@ def _upsert_imagem(
         parsed.ambiente_tipo,
         parsed.ambiente_tema,
         parsed.slug_arquivo,
+        largura,
+        altura,
+        orientacao,
+        possui_pessoa,
         reduzida_path,
         mtime,
         tamanho,
@@ -167,9 +206,9 @@ def _upsert_imagem(
         INSERT INTO imagens
             (path, path_raw, nome_arquivo, ano, tipo, colecao, categoria, drop_numero,
              drop_tema, pessoa, pessoa_tipo, formato_foto, variante, ambiente_tipo,
-             ambiente_tema, slug_arquivo,
+             ambiente_tema, slug_arquivo, largura, altura, orientacao, possui_pessoa,
              reduzida_path, mtime, tamanho_bytes, status, atualizado_em)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(path) DO UPDATE SET
             path_raw=excluded.path_raw, nome_arquivo=excluded.nome_arquivo,
             ano=excluded.ano, tipo=excluded.tipo, colecao=excluded.colecao,
@@ -179,6 +218,10 @@ def _upsert_imagem(
             formato_foto=excluded.formato_foto,
             variante=excluded.variante,
             ambiente_tema=excluded.ambiente_tema, slug_arquivo=excluded.slug_arquivo,
+            largura=COALESCE(excluded.largura, imagens.largura),
+            altura=COALESCE(excluded.altura, imagens.altura),
+            orientacao=COALESCE(excluded.orientacao, imagens.orientacao),
+            possui_pessoa=COALESCE(excluded.possui_pessoa, imagens.possui_pessoa),
             reduzida_path=excluded.reduzida_path, mtime=excluded.mtime,
             tamanho_bytes=excluded.tamanho_bytes, status=excluded.status,
             atualizado_em=excluded.atualizado_em

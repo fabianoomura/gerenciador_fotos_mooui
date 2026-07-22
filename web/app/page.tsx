@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "/api";
+const BRAND_LOGO = process.env.NEXT_PUBLIC_CATALOGO_LOGO_URL ?? "/catalog-icon.svg";
 const POR_PAGINA = 60;
 
 type Cor = { nome?: string; hex: string; proporcao?: number; peso?: number };
@@ -17,12 +18,21 @@ type Foto = {
   pessoa_tipo?: string;
   variante?: string;
   ambiente_tema?: string;
+  largura?: number;
+  altura?: number;
+  orientacao?: string;
   paleta?: Cor[];
   cores_comerciais?: Cor[];
   cores_marketing?: Cor[];
 };
 type Faceta = { valor: string | number; total: number };
 type Facetas = Record<string, Faceta[]>;
+
+const ORIENTACOES = [
+  { valor: "vertical", rotulo: "Vertical" },
+  { valor: "horizontal", rotulo: "Horizontal" },
+  { valor: "square", rotulo: "Quadrada" },
+];
 
 export default function Home() {
   const [fotos, setFotos] = useState<Foto[]>([]);
@@ -31,6 +41,7 @@ export default function Home() {
   const [q, setQ] = useState("");
   const [anos, setAnos] = useState<string[]>(["2026"]);
   const [tipos, setTipos] = useState<string[]>([]);
+  const [orientacoes, setOrientacoes] = useState<string[]>([]);
   const [papeis, setPapeis] = useState<string[]>([]);
   const [pessoas, setPessoas] = useState<string[]>([]);
   const [paletaModo, setPaletaModo] = useState<"comercial" | "marketing">("comercial");
@@ -102,6 +113,7 @@ export default function Home() {
     if (q.trim()) params.set("q", q.trim());
     anos.forEach((valor) => params.append("ano", valor));
     tipos.forEach((valor) => params.append("tipo", valor));
+    orientacoes.forEach((valor) => params.append("orientacao", valor));
     papeis.forEach((valor) => params.append("pessoa_tipo", valor));
     pessoas.forEach((valor) => params.append("pessoa", valor));
     if (cor) params.set(paletaModo === "comercial" ? "cor" : "tom", cor);
@@ -110,7 +122,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!buscaImagemAtiva) carregar(parametrosAtuais(), 1);
-  }, [anos, tipos, papeis, pessoas, cor, paletaModo, buscaImagemAtiva]);
+  }, [anos, tipos, orientacoes, papeis, pessoas, cor, paletaModo, buscaImagemAtiva]);
 
   useEffect(() => {
     function colarImagem(evento: ClipboardEvent) {
@@ -145,6 +157,7 @@ export default function Home() {
     setQ("");
     setAnos([]);
     setTipos([]);
+    setOrientacoes([]);
     setPapeis([]);
     setPessoas([]);
     setCor("");
@@ -244,7 +257,7 @@ export default function Home() {
     <main>
       <header className="topbar">
         <a className="brand" href="#">
-          <img className="brandLogo" src="/catalog-icon.svg" alt="" />
+          <img className="brandLogo" src={BRAND_LOGO} alt="" />
           <span>Foto Catálogo <small>pesquisa visual</small></span>
         </a>
         <form className="search" onSubmit={buscar}>
@@ -317,6 +330,17 @@ export default function Home() {
                 onClick={() => alternar(valor, tipos, setTipos)}
               >{valor} <small>{item.total}</small></button>;
             })}
+          </div>
+          <label>Orientação</label>
+          <div className="chips">
+            {ORIENTACOES.map((item) => (
+              <button
+                type="button"
+                className={orientacoes.includes(item.valor) ? "active" : ""}
+                key={item.valor}
+                onClick={() => alternar(item.valor, orientacoes, setOrientacoes)}
+              >{item.rotulo}</button>
+            ))}
           </div>
           <label>Perfil</label>
           <div className="chips profileChips">
@@ -438,6 +462,9 @@ export default function Home() {
               <dt>Coleção</dt><dd>{selecionada.colecao ?? "—"}</dd>
               <dt>Pessoa</dt><dd>{selecionada.pessoa ?? "—"}</dd>
               <dt>Variante</dt><dd>{selecionada.variante ?? "original"}</dd>
+              <dt>Dimensões</dt><dd>{selecionada.largura && selecionada.altura
+                ? `${selecionada.largura} × ${selecionada.altura}px`
+                : "—"}{selecionada.orientacao ? ` · ${selecionada.orientacao}` : ""}</dd>
             </dl>
             <div className="path">{selecionada.path}</div>
             <div className="modalActions">

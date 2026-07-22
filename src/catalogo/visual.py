@@ -12,7 +12,7 @@ from typing import Protocol
 from PIL import Image
 
 from catalogo.db import bootstrap, connect
-from catalogo.palette import extrair_paleta, simplificar_cores
+from catalogo.palette import extrair_paleta, extrair_paleta_produto, simplificar_cores
 
 
 class ImageEmbedder(Protocol):
@@ -67,7 +67,7 @@ def processar_visuais(
             config["modelo_embedding_imagem"], batch_size=tamanho_lote
         )
         sql = """
-            SELECT id, path, reduzida_path, thumb_path
+            SELECT id, path, reduzida_path, thumb_path, tipo
             FROM imagens
             WHERE status != 'removido' AND visual_status != 'ok'
             ORDER BY (reduzida_path IS NULL), id
@@ -96,6 +96,7 @@ def _processar_lote(conn, rows, embedder, resumo: VisualResult, config: dict[str
             list[dict[str, object]],
             list[dict[str, object]],
             list[dict[str, object]],
+            list[dict[str, object]],
         ]
     ] = []
     referencias = json.loads(config["cores_comerciais"])
@@ -104,28 +105,36 @@ def _processar_lote(conn, rows, embedder, resumo: VisualResult, config: dict[str
     def carregar(row):
         imagem, thumb_path = _carregar_imagem(row, config)
         paleta = extrair_paleta(imagem, k=int(config["paleta_k"]))
+        eh_produto = str(row["tipo"] or "").casefold().startswith("produto")
+        paleta_produto = (
+            extrair_paleta_produto(imagem, k=int(config["paleta_k"]))
+            if eh_produto
+            else paleta
+        )
         cores = simplificar_cores(
-            paleta,
+            paleta_produto,
             referencias,
             max_cores=int(config["cores_comerciais_max"]),
             min_proporcao=float(config["cores_comerciais_min_proporcao"]),
         )
         cores_marketing = simplificar_cores(
-            paleta,
+            paleta_produto,
             referencias_marketing,
             max_cores=int(config["cores_marketing_max"]),
             min_proporcao=float(config["cores_marketing_min_proporcao"]),
         )
-        return row, imagem, thumb_path, paleta, cores, cores_marketing
+        return row, imagem, thumb_path, paleta, paleta_produto, cores, cores_marketing
 
     with ThreadPoolExecutor(max_workers=int(config["io_workers"])) as executor:
         futuros = [(row, executor.submit(carregar, row)) for row in rows]
     for row, futuro in futuros:
         try:
-            _, imagem, thumb_path, paleta, cores, cores_marketing = futuro.result()
+            _, imagem, thumb_path, paleta, paleta_produto, cores, cores_marketing = futuro.result()
             if thumb_path is not None:
                 conn.execute("UPDATE imagens SET thumb_path=? WHERE id=?", (thumb_path, row["id"]))
-            preparados.append((row["id"], imagem, paleta, cores, cores_marketing))
+            preparados.append(
+                (row["id"], imagem, paleta, paleta_produto, cores, cores_marketing)
+            )
         except Exception as exc:  # Pillow pode emitir varios tipos para arquivo corrompido
             conn.execute(
                 "UPDATE imagens SET visual_status='erro', visual_erro=? WHERE id=?",
@@ -137,7 +146,7 @@ def _processar_lote(conn, rows, embedder, resumo: VisualResult, config: dict[str
         return
     try:
         vetores = embedder.encode_images([item[1] for item in preparados])
-        for (imagem_id, imagem, paleta, cores, cores_marketing), vetor in zip(
+        for (imagem_id, imagem, paleta, paleta_produto, cores, cores_marketing), vetor in zip(
             preparados, vetores, strict=True
         ):
             valores = [float(valor) for valor in vetor]
@@ -151,13 +160,15 @@ def _processar_lote(conn, rows, embedder, resumo: VisualResult, config: dict[str
             conn.execute(
                 """
                 UPDATE imagens
-                SET paleta_json=?, cores_comerciais_json=?, cores_marketing_json=?,
+                SET paleta_json=?, paleta_produto_json=?, cores_comerciais_json=?,
+                    cores_marketing_json=?,
                     visual_status='ok',
                     visual_erro=NULL, atualizado_em=unixepoch('subsec')
                 WHERE id=?
                 """,
                 (
                     json.dumps(paleta, ensure_ascii=False),
+                    json.dumps(paleta_produto, ensure_ascii=False),
                     json.dumps(cores, ensure_ascii=False),
                     json.dumps(cores_marketing, ensure_ascii=False),
                     imagem_id,
@@ -166,7 +177,7 @@ def _processar_lote(conn, rows, embedder, resumo: VisualResult, config: dict[str
             imagem.close()
             resumo.processadas += 1
     except Exception as exc:
-        for imagem_id, imagem, _, _, _ in preparados:
+        for imagem_id, imagem, _, _, _, _ in preparados:
             imagem.close()
             conn.execute(
                 "UPDATE imagens SET visual_status='erro', visual_erro=? WHERE id=?",

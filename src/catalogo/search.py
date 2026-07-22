@@ -9,7 +9,16 @@ from pathlib import Path
 from typing import Protocol
 
 from catalogo.db import connect
+from catalogo.filtros import construir_filtros_sql
 from catalogo.parser import normalizar_segmento
+from catalogo.sinonimos import carregar_grupos, expandir_tokens
+
+_COLUNAS_RESULTADO = """
+    id, path, ano, tipo, colecao, categoria, pessoa, pessoa_tipo,
+    formato_foto, variante, ambiente_tipo, ambiente_tema, drop_tema,
+    largura, altura, orientacao, possui_pessoa, direitos_uso_status,
+    paleta_json, cores_comerciais_json, cores_marketing_json
+"""
 
 
 class TextEmbedder(Protocol):
@@ -60,10 +69,8 @@ def buscar_semantica(
         resultados = []
         for vizinho in vizinhos:
             imagem = conn.execute(
-                """
-                SELECT id, path, ano, tipo, colecao, categoria, pessoa, pessoa_tipo,
-                       formato_foto, variante, ambiente_tipo, ambiente_tema, paleta_json,
-                       cores_comerciais_json, cores_marketing_json
+                f"""
+                SELECT {_COLUNAS_RESULTADO}
                 FROM imagens WHERE id=? AND status!='removido'
                 """,
                 (vizinho["rowid"],),
@@ -107,9 +114,7 @@ def buscar_por_vetor(
         placeholders = ",".join("?" for _ in ids)
         imagens = conn.execute(
             f"""
-            SELECT id, path, ano, tipo, colecao, categoria, pessoa, pessoa_tipo,
-                   formato_foto, variante, ambiente_tipo, ambiente_tema, paleta_json,
-                   cores_comerciais_json, cores_marketing_json
+            SELECT {_COLUNAS_RESULTADO}
             FROM imagens
             WHERE id IN ({placeholders}) AND status!='removido'
             """,
@@ -136,15 +141,27 @@ def buscar_hibrida(
     limit: int = 20,
     ano: int | Sequence[int] | None = None,
     tipo: str | Sequence[str] | None = None,
+    colecao: str | Sequence[str] | None = None,
     pessoa: str | Sequence[str] | None = None,
     pessoa_tipo: str | Sequence[str] | None = None,
     formato_foto: str | Sequence[str] | None = None,
     categoria: str | Sequence[str] | None = None,
     variante: str | Sequence[str] | None = None,
+    ambiente_tipo: str | Sequence[str] | None = None,
+    ambiente_tema: str | Sequence[str] | None = None,
+    drop_tema: str | Sequence[str] | None = None,
+    orientacao: str | Sequence[str] | None = None,
+    possui_pessoa: bool | str | None = None,
+    possui_modelo: bool | str | None = None,
+    direitos_uso_status: str | Sequence[str] | None = None,
     cor: str | Sequence[str] | None = None,
     tom: str | Sequence[str] | None = None,
 ) -> list[dict[str, object]]:
-    """Combina metadados exatos, FTS do caminho e ranking vetorial."""
+    """Combina metadados exatos, FTS do caminho e ranking vetorial.
+
+    Os filtros restringem os candidatos ANTES do ranking FTS/vetorial, para
+    nao eliminar resultados relevantes depois do top-k.
+    """
 
     conn = connect(db_path)
     try:
@@ -153,18 +170,37 @@ def buscar_hibrida(
             texto,
             ano=ano,
             tipo=tipo,
+            colecao=colecao,
             pessoa=pessoa,
             pessoa_tipo=pessoa_tipo,
             formato_foto=formato_foto,
             categoria=categoria,
             variante=variante,
+            ambiente_tipo=ambiente_tipo,
+            ambiente_tema=ambiente_tema,
+            drop_tema=drop_tema,
+            orientacao=orientacao,
+            possui_pessoa=possui_pessoa,
+            possui_modelo=possui_modelo,
+            direitos_uso_status=direitos_uso_status,
             cor=cor,
             tom=tom,
         )
-        candidatos = _candidatos_sql(conn, filtros, limit=2000)
-        ids_permitidos = set(candidatos)
-        if not ids_permitidos:
-            return []
+        clausulas, params_filtro = construir_filtros_sql(filtros)
+        tem_filtros = bool(clausulas)
+
+        # Ramo textual: FTS sobre o caminho/metadados, expandido por sinonimos e
+        # ordenado por bm25. Os candidatos vem das proprias correspondencias de
+        # texto e vetor (nao de um lote arbitrario), respeitando os filtros.
+        tokens_extra = expandir_tokens(texto, carregar_grupos(conn))
+        fts_ids = _fts_ranked_ids(conn, texto, tokens_extra, limit=2000)
+        fts_permitidos = _permitir(conn, fts_ids, clausulas, params_filtro)
+        ranking_fts = {
+            imagem_id: posicao
+            for posicao, imagem_id in enumerate(
+                (i for i in fts_ids if i in fts_permitidos), 1
+            )
+        }
 
         config = {
             row["chave"]: row["valor"] for row in conn.execute("SELECT chave, valor FROM config")
@@ -178,21 +214,33 @@ def buscar_hibrida(
             """,
             (json.dumps(vetor),),
         ).fetchall()
+        vec_ids = [row["rowid"] for row in vizinhos]
+        vec_permitidos = _permitir(conn, vec_ids, clausulas, params_filtro)
         ranking_vetor = {
-            row["rowid"]: posicao
-            for posicao, row in enumerate(vizinhos, 1)
-            if row["rowid"] in ids_permitidos
+            imagem_id: posicao
+            for posicao, imagem_id in enumerate(
+                (i for i in vec_ids if i in vec_permitidos), 1
+            )
         }
-        ranking_fts = _ranking_fts(conn, texto, filtros, ids_permitidos)
+
+        ids = set(ranking_fts) | set(ranking_vetor)
+        if ids:
+            candidatos = _buscar_rows(conn, ids)
+        elif tem_filtros:
+            # Texto nao casou, mas ha filtros: devolve o universo do filtro.
+            candidatos = _candidatos_sql(conn, filtros, limit=limit * 3)
+            ids = set(candidatos)
+        if not ids:
+            return []
 
         pontuacoes: dict[int, float] = {}
-        for imagem_id in ids_permitidos:
+        for imagem_id in ids:
             pontos = 0.0
             if imagem_id in ranking_vetor:
                 pontos += 1 / (60 + ranking_vetor[imagem_id])
             if imagem_id in ranking_fts:
                 pontos += 2 / (60 + ranking_fts[imagem_id])
-            if filtros:
+            if tem_filtros:
                 pontos += 0.001
             pontuacoes[imagem_id] = pontos
 
@@ -229,10 +277,8 @@ def buscar_semelhantes(
             if vizinho["rowid"] == imagem_id:
                 continue
             imagem = conn.execute(
-                """
-                SELECT id, path, ano, tipo, colecao, categoria, pessoa, pessoa_tipo,
-                       formato_foto, variante, ambiente_tipo, ambiente_tema, paleta_json,
-                       cores_comerciais_json, cores_marketing_json
+                f"""
+                SELECT {_COLUNAS_RESULTADO}
                 FROM imagens WHERE id=? AND status!='removido'
                 """,
                 (vizinho["rowid"],),
@@ -291,32 +337,13 @@ def _inferir_filtros(conn, texto: str, **explicitos) -> dict[str, object]:
 
 
 def _candidatos_sql(conn, filtros: dict[str, object], *, limit: int) -> dict[int, object]:
-    colunas = {"ano", "tipo", "pessoa", "pessoa_tipo", "formato_foto", "categoria", "variante"}
     where = ["status != 'removido'", "visual_status = 'ok'"]
-    params: list[object] = []
-    for chave, valor in filtros.items():
-        valores = valor if isinstance(valor, (list, tuple, set)) else [valor]
-        if not valores:
-            continue
-        if chave in {"cor", "tom"}:
-            coluna_cores = "cores_comerciais_json" if chave == "cor" else "cores_marketing_json"
-            where.append(
-                f"EXISTS (SELECT 1 FROM json_each(imagens.{coluna_cores}) "
-                f"WHERE json_extract(value, '$.nome') IN "
-                f"({','.join('?' for _ in valores)}))"
-            )
-            params.extend(valores)
-            continue
-        if chave not in colunas:
-            continue
-        where.append(f"{chave} IN ({','.join('?' for _ in valores)})")
-        params.extend(valores)
+    clausulas, params = construir_filtros_sql(filtros)
+    where.extend(clausulas)
     params.append(limit)
     rows = conn.execute(
         f"""
-        SELECT id, path, ano, tipo, colecao, categoria, pessoa, pessoa_tipo,
-               formato_foto, variante, ambiente_tipo, ambiente_tema, paleta_json,
-               cores_comerciais_json, cores_marketing_json
+        SELECT {_COLUNAS_RESULTADO}
         FROM imagens WHERE {" AND ".join(where)} LIMIT ?
         """,
         params,
@@ -324,28 +351,69 @@ def _candidatos_sql(conn, filtros: dict[str, object], *, limit: int) -> dict[int
     return {row["id"]: row for row in rows}
 
 
-def _ranking_fts(
-    conn, texto: str, filtros: dict[str, object], permitidos: set[int]
-) -> dict[int, int]:
+def _tokens_consulta(texto: str) -> list[str]:
     normalizado = normalizar_segmento(texto).replace("quartinho", "quarto")
     stopwords = {"para", "com", "das", "dos", "uma", "foto", "tema"}
-    tokens = [
+    return [
         token
         for token in re.findall(r"[a-z0-9]+", normalizado)
         if len(token) >= 3 and token not in stopwords
     ]
-    if not tokens:
-        return {}
-    for operador in (" AND ", " OR "):
-        consulta = operador.join(f'"{token}"*' for token in tokens)
-        try:
-            rows = conn.execute(
-                "SELECT rowid FROM imagens_fts WHERE imagens_fts MATCH ? LIMIT 1000",
-                (consulta,),
-            ).fetchall()
-        except Exception:
-            continue
-        ids = [row["rowid"] for row in rows if row["rowid"] in permitidos]
-        if ids:
-            return {imagem_id: posicao for posicao, imagem_id in enumerate(ids, 1)}
-    return {}
+
+
+def _fts_ranked_ids(
+    conn, texto: str, tokens_extra: set[str], *, limit: int
+) -> list[int]:
+    """IDs ordenados por relevancia bm25 do FTS, com expansao por sinonimos."""
+
+    tokens = _tokens_consulta(texto)
+    todos = tokens + [token for token in sorted(tokens_extra) if token not in tokens]
+    if not todos:
+        return []
+    consulta = " OR ".join(f'"{token}"*' for token in todos)
+    try:
+        rows = conn.execute(
+            "SELECT rowid FROM imagens_fts WHERE imagens_fts MATCH ? ORDER BY rank LIMIT ?",
+            (consulta, limit),
+        ).fetchall()
+    except Exception:
+        return []
+    return [row["rowid"] for row in rows]
+
+
+def _em_lotes(ids, tamanho=800):
+    ids = list(ids)
+    for inicio in range(0, len(ids), tamanho):
+        yield ids[inicio : inicio + tamanho]
+
+
+def _permitir(
+    conn, ids: list[int], clausulas: list[str], params_filtro: list[object]
+) -> set[int]:
+    """Filtra ids por status/visual e pelos filtros estruturais."""
+
+    if not ids:
+        return set()
+    where = ["status != 'removido'", "visual_status = 'ok'", *clausulas]
+    permitidos: set[int] = set()
+    for lote in _em_lotes(ids):
+        marcadores = ",".join("?" for _ in lote)
+        rows = conn.execute(
+            f"SELECT id FROM imagens WHERE id IN ({marcadores}) AND {' AND '.join(where)}",
+            [*lote, *params_filtro],
+        ).fetchall()
+        permitidos.update(row["id"] for row in rows)
+    return permitidos
+
+
+def _buscar_rows(conn, ids: set[int]) -> dict[int, object]:
+    resultado: dict[int, object] = {}
+    for lote in _em_lotes(ids):
+        marcadores = ",".join("?" for _ in lote)
+        rows = conn.execute(
+            f"SELECT {_COLUNAS_RESULTADO} FROM imagens "
+            f"WHERE id IN ({marcadores}) AND status != 'removido'",
+            lote,
+        ).fetchall()
+        resultado.update((row["id"], row) for row in rows)
+    return resultado

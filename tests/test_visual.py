@@ -39,13 +39,14 @@ def test_processa_paleta_e_embedding(tmp_path: Path) -> None:
     try:
         imagem = conn.execute(
             """
-            SELECT id, paleta_json, cores_comerciais_json, cores_marketing_json,
-                   visual_status, thumb_path
+            SELECT id, paleta_json, paleta_produto_json, cores_comerciais_json,
+                   cores_marketing_json, visual_status, thumb_path
             FROM imagens
             """
         ).fetchone()
         assert imagem["visual_status"] == "ok"
         assert '"#FF0000"' in imagem["paleta_json"]
+        assert '"#FF0000"' in imagem["paleta_produto_json"]
         assert Path(imagem["thumb_path"]).is_file()
         assert '"Vermelho"' in imagem["cores_comerciais_json"]
         assert '"Vermelho"' in imagem["cores_marketing_json"]

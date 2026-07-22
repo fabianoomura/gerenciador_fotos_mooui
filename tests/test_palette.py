@@ -6,7 +6,12 @@ from pathlib import Path
 
 from PIL import Image
 
-from catalogo.palette import delta_e, extrair_paleta, simplificar_cores
+from catalogo.palette import (
+    delta_e,
+    extrair_paleta,
+    extrair_paleta_produto,
+    simplificar_cores,
+)
 
 
 def test_extrai_cores_com_proporcao(tmp_path: Path) -> None:
@@ -27,6 +32,26 @@ def test_remove_transparencia_total(tmp_path: Path) -> None:
     Image.new("RGBA", (2, 2), (255, 0, 0, 0)).save(path)
 
     assert extrair_paleta(path, k=5) == []
+
+
+def test_paleta_produto_remove_fundo_e_preserva_branco_interno() -> None:
+    imagem = Image.new("RGB", (100, 100), "#E8E4DC")
+    for y in range(20, 80):
+        for x in range(20, 80):
+            imagem.putpixel((x, y), (46, 132, 72) if x < 50 else (250, 250, 247))
+
+    paleta = extrair_paleta_produto(imagem, k=3)
+
+    hexes = {item["hex"] for item in paleta}
+    assert "#E8E4DC" not in hexes
+    assert "#2E8448" in hexes
+    assert "#FAFAF7" in hexes
+
+
+def test_paleta_produto_nao_apaga_imagem_que_preenche_o_quadro() -> None:
+    imagem = Image.new("RGB", (40, 40), "#D94841")
+
+    assert extrair_paleta_produto(imagem, k=3) == extrair_paleta(imagem, k=3)
 
 
 def test_delta_e_distingue_cores_proximas_e_distantes() -> None:

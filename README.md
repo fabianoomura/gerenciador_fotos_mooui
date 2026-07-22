@@ -21,7 +21,10 @@ apenas para contextualizar a origem do projeto e não faz parte da licença do c
 - embeddings CLIP de 512 dimensões armazenados com `sqlite-vec`;
 - pesquisa por imagem enviada, arrastada ou colada;
 - paleta dominante e famílias de cores configuráveis;
-- filtros combináveis por ano, tipo, pessoa, perfil e cor;
+- filtros combináveis por ano, tipo, coleção, pessoa, perfil, ambiente, cor,
+  orientação, presença de pessoa/modelo e direitos de uso;
+- filtros negativos (`pessoa_tipo=!modelo`) e rejeição de parâmetros desconhecidos;
+- `GET /capabilities` descrevendo filtros e modos de busca para integrações;
 - paginação, ordenação e imagens semelhantes;
 - cache local de thumbnails, sem escrever no compartilhamento;
 - download opcional do original;

@@ -57,3 +57,5 @@ desktop.ini
 # Next.js
 web/node_modules/
 web/.next/
+web/public/*.local.*
+web/tsconfig.tsbuildinfo

@@ -73,6 +73,7 @@ def test_seeds_populam_vocab_e_config(tmp_path: Path) -> None:
     assert "thumb_path" in colunas_imagens
     assert "cores_comerciais_json" in colunas_imagens
     assert "cores_marketing_json" in colunas_imagens
+    assert "paleta_produto_json" in colunas_imagens
     assert "pessoa_tipo" in colunas_pessoas
 
 

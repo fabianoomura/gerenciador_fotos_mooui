@@ -88,10 +88,29 @@ def _migrate_existing_schema(conn: sqlite3.Connection) -> None:
             conn.execute("ALTER TABLE imagens ADD COLUMN visual_erro TEXT")
         if tabela == "imagens" and "thumb_path" not in colunas:
             conn.execute("ALTER TABLE imagens ADD COLUMN thumb_path TEXT")
+        if tabela == "imagens" and "paleta_produto_json" not in colunas:
+            conn.execute("ALTER TABLE imagens ADD COLUMN paleta_produto_json TEXT")
         if tabela == "imagens" and "cores_comerciais_json" not in colunas:
             conn.execute("ALTER TABLE imagens ADD COLUMN cores_comerciais_json TEXT")
         if tabela == "imagens" and "cores_marketing_json" not in colunas:
             conn.execute("ALTER TABLE imagens ADD COLUMN cores_marketing_json TEXT")
+        # V2: dimensoes, orientacao e direitos de uso (checks vivem no schema novo;
+        # em bancos migrados a validacao fica na aplicacao).
+        if tabela == "imagens" and "largura" not in colunas:
+            conn.execute("ALTER TABLE imagens ADD COLUMN largura INTEGER")
+        if tabela == "imagens" and "altura" not in colunas:
+            conn.execute("ALTER TABLE imagens ADD COLUMN altura INTEGER")
+        if tabela == "imagens" and "orientacao" not in colunas:
+            conn.execute("ALTER TABLE imagens ADD COLUMN orientacao TEXT")
+        if tabela == "imagens" and "possui_pessoa" not in colunas:
+            conn.execute("ALTER TABLE imagens ADD COLUMN possui_pessoa INTEGER")
+        if tabela == "imagens" and "direitos_uso_status" not in colunas:
+            conn.execute(
+                "ALTER TABLE imagens ADD COLUMN direitos_uso_status TEXT "
+                "NOT NULL DEFAULT 'unknown'"
+            )
+        if tabela == "imagens" and "direitos_uso_ref" not in colunas:
+            conn.execute("ALTER TABLE imagens ADD COLUMN direitos_uso_ref TEXT")
 
 
 def _strip_vec_table(sql: str) -> str:
