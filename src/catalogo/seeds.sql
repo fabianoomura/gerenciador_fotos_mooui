@@ -17,6 +17,15 @@ INSERT OR IGNORE INTO vocab_tipo (termo, tipo) VALUES
     ('influenciadores', 'influenciadores'),
     ('influenciador',   'influenciadores');
 
+-- 06/10/2026: pastas de colecao que existiam no acervo sem tipo (pedido do dono).
+INSERT OR IGNORE INTO vocab_tipo (termo, tipo) VALUES
+    ('quartos adulto',   'quartos adulto'),
+    ('envios',           'envios'),
+    ('envios especiais', 'envios'),
+    ('eventos',          'eventos'),
+    ('eventos - ok',     'eventos'),
+    ('casa mooui',       'casa mooui');
+
 -- Pastas tematicas da raiz podem ser adicionadas ao vocabulario conforme o acervo.
 -- Ficam para v1.1: parser v1 so estrutura pastas de ano (^20\d{2}$).
 -- Indexador v1 ainda VARRE essas pastas (embedding + paleta + FTS pelo path_raw),
