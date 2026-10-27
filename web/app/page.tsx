@@ -39,7 +39,7 @@ export default function Home() {
   const [facetas, setFacetas] = useState<Facetas>({});
   const [swatches, setSwatches] = useState<Cor[]>([]);
   const [q, setQ] = useState("");
-  const [anos, setAnos] = useState<string[]>(["2026"]);
+  const [anos, setAnos] = useState<string[]>([]);
   const [tipos, setTipos] = useState<string[]>([]);
   const [orientacoes, setOrientacoes] = useState<string[]>([]);
   const [papeis, setPapeis] = useState<string[]>([]);
