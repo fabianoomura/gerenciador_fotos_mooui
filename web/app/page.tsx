@@ -29,8 +29,8 @@ type Faceta = { valor: string | number; total: number };
 type Facetas = Record<string, Faceta[]>;
 
 const ORIENTACOES = [
-  { valor: "vertical", rotulo: "Vertical" },
-  { valor: "horizontal", rotulo: "Horizontal" },
+  { valor: "vertical", rotulo: "Vertical (retrato)" },
+  { valor: "horizontal", rotulo: "Horizontal (paisagem)" },
   { valor: "square", rotulo: "Quadrada" },
 ];
 
